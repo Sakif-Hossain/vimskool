@@ -1,3 +1,5 @@
+import { findGoogleDocsEditor } from "./utils";
+
 export enum Mode {
   OFF = "OFF",
   COMMAND = "COMMAND",
@@ -8,6 +10,18 @@ export enum Mode {
 export class VimState {
   private _mode: Mode = Mode.OFF;
   private _clipboard: string = "";
+  private _editor: HTMLElement | null = null;
+
+  constructor() {
+    this._editor = findGoogleDocsEditor();
+    if (!this._editor) {
+      console.error("Failed to initialize VimState: Editor not found");
+    }
+  }
+
+  get editor(): HTMLElement | null {
+    return this._editor;
+  }
 
   setMode(newMode: Mode) {
     this._mode = newMode;
@@ -47,6 +61,12 @@ export class VimState {
     const statusBar = document.getElementById("vim-status-bar");
     if (statusBar) {
       statusBar.textContent = `MODE: ${this._mode}`;
+    }
+  }
+
+  focusEditor() {
+    if (this._editor) {
+      this._editor.focus();
     }
   }
 }
