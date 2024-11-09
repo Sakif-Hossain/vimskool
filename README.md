@@ -1,4 +1,5 @@
 # VIMrly
+
 Vim Motions for Google Docs.
 
-Built at DevEdmonton 3.0 Hackathon 2024.
+Built at HackED(BETA) 2024.
