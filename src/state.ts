@@ -1,27 +1,52 @@
 export enum Mode {
-  NORMAL = "NORMAL",
+  OFF = "OFF",
+  COMMAND = "COMMAND",
   INSERT = "INSERT",
   VISUAL = "VISUAL",
 }
 
 export class VimState {
-  mode: Mode = Mode.NORMAL;
+  private _mode: Mode = Mode.OFF;
+  private _clipboard: string = "";
 
-  // Transition to a new mode
   setMode(newMode: Mode) {
-    this.mode = newMode;
+    this._mode = newMode;
     console.log(`Switched to ${newMode} mode.`);
+    this.updateStatusBar();
   }
 
-  isInInsertMode() {
-    return this.mode === Mode.INSERT;
+  get mode(): Mode {
+    return this._mode;
   }
 
-  isInNormalMode() {
-    return this.mode === Mode.NORMAL;
+  isInOffMode(): boolean {
+    return this._mode === Mode.OFF;
   }
 
-  isInVisualMode() {
-    return this.mode === Mode.VISUAL;
+  isInInsertMode(): boolean {
+    return this._mode === Mode.INSERT;
+  }
+
+  isInCommandMode(): boolean {
+    return this._mode === Mode.COMMAND;
+  }
+
+  isInVisualMode(): boolean {
+    return this._mode === Mode.VISUAL;
+  }
+
+  setClipboard(text: string) {
+    this._clipboard = text;
+  }
+
+  getClipboard(): string {
+    return this._clipboard;
+  }
+
+  private updateStatusBar() {
+    const statusBar = document.getElementById("vim-status-bar");
+    if (statusBar) {
+      statusBar.textContent = `MODE: ${this._mode}`;
+    }
   }
 }

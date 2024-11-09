@@ -1,10 +1,14 @@
 Commands:
 1. npm i typescript -g
 2. npm install @types/chrome --save-dev
-3. To run, do npm run build or npm run watch
+3. npm install --save-dev copy-webpack-plugin
+4. npm install --save-dev mini-css-extract-plugin
+5. npm install --save-dev webpack
+(OR JUST DO npm install LOL)
+6. To run, do npm run build or npm run watch
 
 Dev:
 Load the Extension in Chrome:
 - Open Chrome and go to chrome://extensions/.
 - Enable "Developer mode" in the top right corner.
-- Click "Load unpacked" and select the project’s vim-google-docs-extension folder.
+- Click "Load unpacked" and select the project’s dist folder.
