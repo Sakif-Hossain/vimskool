@@ -55,24 +55,45 @@ function init() {
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  const interceptedKeys = [
-    "h",
-    "j",
-    "k",
-    "l",
-    "i",
-    "v",
-    "d",
-    "y",
-    "p",
-    "Escape",
-    "Esc",
-  ];
+  const globalKeys = ["Escape", "Esc"];
 
-  if (!state.isInOffMode() && interceptedKeys.includes(event.key)) {
-    event.preventDefault();
-    event.stopPropagation();
+  const commandKeys = ["h", "j", "k", "l", "i", "v", "d", "y", "p"];
+
+  // If we're in command mode
+  if (state.isInCommandMode()) {
+    // Allow only command keys and global keys
+    if (!globalKeys.includes(event.key) && !commandKeys.includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    // Handle the command key
+    if (commandKeys.includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      handleCommand(event.key, state);
+    }
+  }
+
+  // If we're in visual mode
+  else if (state.isInVisualMode()) {
+    // Similar handling as command mode
+    if (!globalKeys.includes(event.key) && !commandKeys.includes(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     handleCommand(event.key, state);
+  }
+
+  // If we're in insert mode, let all keys through EXCEPT Escape
+  else if (state.isInInsertMode()) {
+    if (globalKeys.includes(event.key)) {
+      handleCommand(event.key, state);
+    }
+    // Let all other keys pass through naturally
   }
 }
 
