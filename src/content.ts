@@ -58,17 +58,20 @@ function handleKeydown(event: KeyboardEvent) {
   const globalKeys = ["Escape", "Esc"];
 
   const commandKeys = ["h", "j", "k", "l", "i", "v", "d", "y", "p"];
+  const commandKeysCore = ["ArrowLeft", "ArrowDown", "ArrowUp", "ArrowRight"];
 
   // If we're in command mode
   if (state.isInCommandMode()) {
     // Allow only command keys and global keys
-    if (!globalKeys.includes(event.key) && !commandKeys.includes(event.key)) {
+    // if the key is not a command key or a global key, prevent the default action
+    if (!globalKeys.includes(event.key) && !commandKeys.includes(event.key) && !commandKeysCore.includes(event.key)) {
       event.preventDefault();
       event.stopPropagation();
       return;
     }
 
     // Handle the command key
+    // if the key is a command key, prevent the default action and stop the event from propagating
     if (commandKeys.includes(event.key)) {
       event.preventDefault();
       event.stopPropagation();
