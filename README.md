@@ -1,5 +1,5 @@
-# VIMrly
+# VimSkool
 
-Vim Motions for Google Docs.
+Vim Motions Chrome Extension for Google Docs.
 
-Built at HackED(BETA) 2024.
+Built at HackEd Beta 2024.
