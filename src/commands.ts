@@ -46,6 +46,7 @@ export function handleCommand(key: string, state: VimState) {
   } else if (state.isInInsertMode()) {
     handleInsertMode(key, state);
   } else if (state.isInVisualMode()) {
+    console.log("Handling visual mode:", key);
     handleVisualMode(key, state);
   }
 }
@@ -102,7 +103,7 @@ function handleCommandMode(key: string, state: VimState) {
             yankText(state);
             break;
         }
-      }, 100); // 500 ms timeout for a second key
+      }, 500); // 500 ms timeout for a second key
       return;
     }
 
@@ -186,14 +187,14 @@ function yankLine(state: VimState) {
     shiftKey: true
   });
 
-  // Store the selected text to navigator.clipboard
-  // wait for a small delay to ensure selection is complete
-  setTimeout(() => {
-    navigator.clipboard.writeText(editor.getSelection()?.toString() || "")
-      .then(() => console.log("Line copied to clipboard:", editor.getSelection()?.toString()))
-      .catch(err => console.error("Failed to copy line to clipboard:", err));
-  }, 100);
-
+  const copyMenuItem = document.querySelector('[aria-label="Copy c"]');
+  if (copyMenuItem) {
+    simulateClick(copyMenuItem as HTMLElement);
+    console.log("Copy menu item clicked successfully");
+  } else {
+    console.error("Copy menu item not found");
+  }
+  
 }
 
 function handleInsertMode(key: string, state: VimState) {
@@ -209,7 +210,6 @@ function handleInsertMode(key: string, state: VimState) {
 function handleVisualMode(key: string, state: VimState) {
   const editor = getEditor();
   if (!editor) return;
-
   if (key === "Escape" || key === "Esc") {
     state.setMode(Mode.COMMAND);
     clearSelection(editor);
@@ -232,11 +232,11 @@ function handleVisualMode(key: string, state: VimState) {
         state.setMode(Mode.COMMAND);
         break;
       case "w":
-        moveToNextWord(editor);
+        moveToNextWord(editor, true);
         break;
       case "b":
         console.log("Moving back a word");
-        moveToBackWord(editor);
+        moveToBackWord(editor, true);
         break
       case "p":
         pasteText(state);
@@ -257,21 +257,28 @@ function handleVisualMode(key: string, state: VimState) {
 }
 
 function yankText(state: VimState) {
+  // Simulated event Shift+ArrowRight to select text
   const editor = getEditor();
   if (!editor) return;
 
-  // Add a small delay to ensure selection is complete
-  setTimeout(() => {
-    const selection = editor.getSelection();
-    if (selection?.toString()) {
+  simulateNativeEvent(editor.body, "keydown", {
+    key: "ArrowRight",
+    code: "ArrowRight",
+    keyCode: 39,
+    which: 39,
+    shiftKey: true,
+    ctrlKey: false
+    
+  });
 
-      // Also try to store in system clipboard
-      navigator.clipboard.writeText(selection.toString()).catch(console.error);
-      
-      // Clear the selection
-      clearSelection(editor);
-    }
-  }, 50);
+  const copyMenuItem = document.querySelector('[aria-label="Copy c"]');
+  if (copyMenuItem) {
+    simulateClick(copyMenuItem as HTMLElement);
+    console.log("Copy menu item clicked successfully");
+  } else {
+    console.error("Copy menu item not found");
+  }
+
 }
 
 
@@ -315,11 +322,14 @@ function deleteSelectedText(state: VimState) {
   const editor = getEditor();
   if (!editor) return;
 
-  const selection = editor.getSelection();
-  if (selection?.toString()) {
-    navigator.clipboard.writeText(selection.toString()).catch(console.error);
-    document.execCommand("delete");
-  }
+  // Press Delete to delete the selected text 
+  console.log("Deleting selected text");
+  simulateNativeEvent(editor.body, "keydown", {
+    key: "Delete",
+    code: "Delete",
+    keyCode: 46,
+    which: 46
+  });
 }
 
 function clearSelection(editor: Document) {
@@ -452,26 +462,36 @@ function extendSelectionDown(editor: Document) {
   });
 }
 
-function moveToNextWord(editor: Document) {
+function moveToNextWord(editor: Document, visualMode = false) {
   // In Google Docs, Ctrl+ArrowRight moves to the next word
-  simulateNativeEvent(editor.body, "keydown", {
+  let packet = {
     key: "ArrowRight",
     code: "ArrowRight",
     keyCode: 39,
     which: 39,
-    ctrlKey: true
-  });
+    ctrlKey: true,
+    shiftKey: false
+  }
+  if (visualMode) {
+    packet.shiftKey = true;
+  }
+  simulateNativeEvent(editor.body, "keydown", packet);
 }
 
-function moveToBackWord(editor: Document) {
-  // In Google Docs, Ctrl+ArrowLeft moves to the previous word
-  simulateNativeEvent(editor.body, "keydown", {
+function moveToBackWord(editor: Document, visualMode = false) {
+  let packet = {
     key: "ArrowLeft",
     code: "ArrowLeft",
     keyCode: 37,
     which: 37,
-    ctrlKey: true
-  });
+    ctrlKey: true,
+    shiftKey: false
+  }
+  if (visualMode) {
+    packet.shiftKey = true;
+  }
+  // In Google Docs, Ctrl+ArrowLeft moves to the previous word
+  simulateNativeEvent(editor.body, "keydown", packet);
 }
 
 function moveCursorToDocStart(editor: Document) {
