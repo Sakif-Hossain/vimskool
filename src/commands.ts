@@ -1,4 +1,5 @@
 import { VimState, Mode } from "./state";
+import { setMode, state } from "./content";
 
 declare module "./state" {
   interface VimState {
@@ -16,9 +17,6 @@ const getEditor = (): Document | null => {
   return iframe?.contentWindow?.document || null;
 };
 
-const getEditorCanvas = (): Element | null => {
-  return document.querySelector(".kix-appview-editor");
-};
 
 const simulateNativeEvent = (
   element: Element,
@@ -28,9 +26,16 @@ const simulateNativeEvent = (
   const event = new KeyboardEvent(eventType, {
     bubbles: true,
     cancelable: true,
+    view: window,
     ...options,
   });
   
+  // Override preventDefault to ensure the event isn't blocked
+  Object.defineProperty(event, 'preventDefault', {
+    value: () => {},
+    writable: false
+  });
+
   console.log("Simulating Native event", event);
   element.dispatchEvent(event);
 };
@@ -48,6 +53,63 @@ export function handleCommand(key: string, state: VimState) {
 function handleCommandMode(key: string, state: VimState) {
   const editor = getEditor();
   if (!editor) return;
+  console.log("Handling command:", key);
+
+  // Handle colon commands
+  if (key === ":") {
+    state.setPendingCommand(":");
+    return;
+  }
+
+   // Handle double-letter commands
+  if (state.pendingCommand) {
+    const fullCommand = state.pendingCommand + key;
+    console.log("Full command:", fullCommand);
+    state.setLastCommand(key);
+    state.setPendingCommand("");
+
+    switch (fullCommand) {
+      case "gg":
+        console.log("Moving to doc start");
+        moveCursorToDocStart(editor);
+        return;
+      case "yy":
+        yankLine(state);
+        return;
+      case "dd":
+        deleteCurrentLine(editor);
+        return;
+      case ":q":
+        setMode(Mode.OFF);
+        clearSelection(editor);
+        state.setPendingCommand("");       
+        return;
+    }
+  } 
+
+    // Set a pending command for potential double-letter commands and add a timeout
+    if (key === "g" || key === "y" || key === "d") {
+      state.setPendingCommand(key);
+      let commandTimeout = setTimeout(() => {
+        console.log("Single key command:", key);
+        state.setPendingCommand("");
+        // Execute single-key command if no second key is pressed
+        switch (key) {
+          case "d":
+            deleteText(editor);
+            break;
+          case "y":
+            yankText(state);
+            break;
+        }
+      }, 100); // 500 ms timeout for a second key
+      return;
+    }
+
+  // Clear any pending command if a different key is pressed
+  state.setPendingCommand("");
+  state.setLastCommand(key);
+
 
   switch (key) {
     case "i":
@@ -68,11 +130,14 @@ function handleCommandMode(key: string, state: VimState) {
     case "l":
       moveCursorRight(editor);
       break;
+    case "w":
+      moveToNextWord(editor);
+      break;
     case "d":
       if (state.isInVisualMode()) {
         deleteSelectedText(state);
       } else {
-        deleteCurrentLine(editor);
+        deleteText(editor);
       }
       break;
     case "y":
@@ -84,10 +149,51 @@ function handleCommandMode(key: string, state: VimState) {
     case "0":
       moveCursorToLineStart(editor);
       break;
+    case "b":
+      moveToBackWord(editor);
+      break
     case "$":
       moveCursorToLineEnd(editor);
       break;
+    case "g":
+      moveCursorToDocStart(editor);
+      break;
+    case "G":
+      moveCursorToDocEnd(editor);
+      break;
+    case "u":
+      performUndo();
+      break;
+    case ".":
+      performRedo();
+      break;
   }
+}
+
+function yankLine(state: VimState) {
+  const editor = getEditor();
+  if (!editor) return;
+
+  // First move to the start of the line
+  moveCursorToLineStart(editor);
+  
+  // Press Shift+End to select to end of line
+  simulateNativeEvent(editor.body, "keydown", {
+    key: "End",
+    code: "End",
+    keyCode: 35,
+    which: 35,
+    shiftKey: true
+  });
+
+  // Store the selected text to navigator.clipboard
+  // wait for a small delay to ensure selection is complete
+  setTimeout(() => {
+    navigator.clipboard.writeText(editor.getSelection()?.toString() || "")
+      .then(() => console.log("Line copied to clipboard:", editor.getSelection()?.toString()))
+      .catch(err => console.error("Failed to copy line to clipboard:", err));
+  }, 100);
+
 }
 
 function handleInsertMode(key: string, state: VimState) {
@@ -125,9 +231,26 @@ function handleVisualMode(key: string, state: VimState) {
         yankText(state);
         state.setMode(Mode.COMMAND);
         break;
+      case "w":
+        moveToNextWord(editor);
+        break;
+      case "b":
+        console.log("Moving back a word");
+        moveToBackWord(editor);
+        break
+      case "p":
+        pasteText(state);
+        state.setMode(Mode.COMMAND);
+        break;
       case "d":
         deleteSelectedText(state);
         state.setMode(Mode.COMMAND);
+        break;
+      case "u":
+        performUndo();
+        break;
+      case ".":
+        performRedo();
         break;
     }
   }
@@ -137,24 +260,55 @@ function yankText(state: VimState) {
   const editor = getEditor();
   if (!editor) return;
 
-  document.execCommand("copy");
-  const selection = editor.getSelection();
-  if (selection?.toString()) {
-    state.setClipboard(selection.toString());
-    clearSelection(editor);
-  }
+  // Add a small delay to ensure selection is complete
+  setTimeout(() => {
+    const selection = editor.getSelection();
+    if (selection?.toString()) {
+
+      // Also try to store in system clipboard
+      navigator.clipboard.writeText(selection.toString()).catch(console.error);
+      
+      // Clear the selection
+      clearSelection(editor);
+    }
+  }, 50);
 }
 
-function pasteText(state: VimState) {
-  const editor = getEditor();
-  if (!editor) return;
 
-  const clipboardText = state.getClipboard();
-  if (clipboardText) {
-    navigator.clipboard.writeText(clipboardText).then(() => {
-      document.execCommand("paste");
-    });
-  }
+function pasteText(state: VimState) {
+  navigator.clipboard.readText()
+    .then(text => {
+      const editor = getEditor();
+      if (!editor) return;
+      
+      // Method 1: Use keyboard input events to insert text
+      const input = new InputEvent('insertText', {
+        bubbles: true,
+        cancelable: true,
+        data: text,
+        inputType: 'insertText'
+      });
+      
+      editor.body.dispatchEvent(input);
+      
+      // Method 2: If Method 1 fails, try simulating keyboard input
+      if (!editor.body.textContent?.includes(text)) {
+        Array.from(text).forEach(char => {
+          const keyEvent = new KeyboardEvent('keypress', {
+            key: char,
+            code: 'Key' + char.toUpperCase(),
+            charCode: char.charCodeAt(0),
+            keyCode: char.charCodeAt(0),
+            which: char.charCodeAt(0),
+            bubbles: true,
+            cancelable: true,
+            composed: true
+          });
+          editor.body.dispatchEvent(keyEvent);
+        });
+      }
+    })
+    .catch(err => console.error('Failed to read clipboard:', err));
 }
 
 function deleteSelectedText(state: VimState) {
@@ -163,7 +317,7 @@ function deleteSelectedText(state: VimState) {
 
   const selection = editor.getSelection();
   if (selection?.toString()) {
-    state.setClipboard(selection.toString());
+    navigator.clipboard.writeText(selection.toString()).catch(console.error);
     document.execCommand("delete");
   }
 }
@@ -226,7 +380,7 @@ function moveCursorToLineEnd(editor: Document) {
   });
 }
 
-function deleteCurrentLine(editor: Document) {
+function deleteText(editor: Document) {
   simulateNativeEvent(editor.body, "keydown", { 
     key: "Delete", 
     code: "Delete", 
@@ -234,6 +388,29 @@ function deleteCurrentLine(editor: Document) {
     which: 46 
   });
 }
+
+function deleteCurrentLine(editor: Document) {
+  // First move to the start of the line
+  moveCursorToLineStart(editor);
+  
+  // Press Shift+End to select to end of line
+  simulateNativeEvent(editor.body, "keydown", {
+    key: "End",
+    code: "End",
+    keyCode: 35,
+    which: 35,
+    shiftKey: true
+  });
+
+  // Press Delete to delete the line
+  simulateNativeEvent(editor.body, "keydown", {
+    key: "Delete",
+    code: "Delete",
+    keyCode: 46,
+    which: 46
+  });
+}
+
 
 function extendSelectionLeft(editor: Document) {
   simulateNativeEvent(editor.body, "keydown", { 
@@ -275,3 +452,89 @@ function extendSelectionDown(editor: Document) {
   });
 }
 
+function moveToNextWord(editor: Document) {
+  // In Google Docs, Ctrl+ArrowRight moves to the next word
+  simulateNativeEvent(editor.body, "keydown", {
+    key: "ArrowRight",
+    code: "ArrowRight",
+    keyCode: 39,
+    which: 39,
+    ctrlKey: true
+  });
+}
+
+function moveToBackWord(editor: Document) {
+  // In Google Docs, Ctrl+ArrowLeft moves to the previous word
+  simulateNativeEvent(editor.body, "keydown", {
+    key: "ArrowLeft",
+    code: "ArrowLeft",
+    keyCode: 37,
+    which: 37,
+    ctrlKey: true
+  });
+}
+
+function moveCursorToDocStart(editor: Document) {
+  // In Google Docs, Ctrl+Home moves to the start of the document
+  simulateNativeEvent(editor.body, "keydown", {
+    key: "Home",
+    code: "Home",
+    keyCode: 36,
+    which: 36,
+    ctrlKey: true
+  });
+}
+
+function moveCursorToDocEnd(editor: Document) {
+  // In Google Docs, Ctrl+End moves to the end of the document
+  simulateNativeEvent(editor.body, "keydown", {
+    key: "End",
+    code: "End",
+    keyCode: 35,
+    which: 35,
+    ctrlKey: true
+  });
+}
+
+
+function simulateClick(element: HTMLElement) {
+  const mousedownEvent = new MouseEvent("mousedown", {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+  });
+  const mouseupEvent = new MouseEvent("mouseup", {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+  });
+  const clickEvent = new MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+    view: window,
+  });
+
+  element.dispatchEvent(mousedownEvent);
+  element.dispatchEvent(mouseupEvent);
+  element.dispatchEvent(clickEvent);
+}
+
+
+
+function performUndo() {
+  const undoButton = document.querySelector('div[data-tooltip="Undo (Ctrl+Z)"]') as HTMLElement;
+  if (undoButton) {
+    simulateClick(undoButton);
+  } else {
+    console.warn("Undo button not found.");
+  }
+}
+
+function performRedo() {
+  const redoButton = document.querySelector('div[data-tooltip="Redo (Ctrl+Y)"]') as HTMLElement;
+  if (redoButton) {
+    simulateClick(redoButton);
+  } else {
+    console.warn("Redo button not found.");
+  }
+}
