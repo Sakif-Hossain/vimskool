@@ -2,7 +2,7 @@
 
 Vim Motions Chrome Extension for Google Docs.
 
-Built at HackEd Beta 2024.
+Built at HACKED(BETA) 2024.
 
 Supported Commands:
 * i   : insert mode
